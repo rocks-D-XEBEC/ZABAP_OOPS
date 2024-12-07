@@ -1,0 +1,129 @@
+***************************************************LOCAL CLASS DEFINITION********************************************
+CLASS lcl_event_receiver DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      handle_toolbar
+        FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object e_interactive,
+
+      handle_user_command
+        FOR EVENT user_command OF cl_gui_alv_grid
+        IMPORTING e_ucomm.
+ENDCLASS.
+**************************************************LOCAL CLASS IMPLEMENTATION********************************************
+CLASS lcl_event_receiver IMPLEMENTATION.
+  METHOD handle_toolbar.
+    DATA: ls_menu    TYPE stb_btnmnu,
+          ls_toolbar TYPE stb_button.
+    MOVE 3 TO ls_toolbar-butn_type.
+    APPEND ls_toolbar TO e_object->mt_toolbar.
+
+    CLEAR ls_toolbar.
+    MOVE 'SELECT_ALL' TO ls_toolbar-function.
+    MOVE icon_select_all TO ls_toolbar-icon.
+    MOVE 'Select All'(111) TO ls_toolbar-quickinfo.
+    MOVE space TO ls_toolbar-disabled.
+    APPEND ls_toolbar TO e_object->mt_toolbar.
+
+    CLEAR ls_toolbar.
+    MOVE 'DESELECT_ALL' TO ls_toolbar-function.
+    MOVE icon_deselect_all TO ls_toolbar-icon.
+    MOVE 'De-select All'(111) TO ls_toolbar-quickinfo.
+    MOVE space TO ls_toolbar-disabled.
+    APPEND ls_toolbar TO e_object->mt_toolbar.
+
+**************************************************************************************************************************
+
+  METHOD handle_user_command.
+    CASE e_ucomm.
+      WHEN 'SAVE'.
+        PERFORM save_data.
+      WHEN 'SELECT_ALL'.
+        PERFORM select_all.
+      WHEN 'DESELECT_ALL'.
+        PERFORM deselect_all.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDMETHOD.
+ENDCLASS.
+
+**************************************************************************************************************************
+
+*&---------------------------------------------------------------------*
+*& Form select_all
+*&---------------------------------------------------------------------*
+FORM select_all .
+  DATA: l_valid           TYPE char1,
+        lt_filter_entries TYPE lvc_t_fidx,
+        lv_selected_tabix TYPE sy-tabix.
+  FIELD-SYMBOLS: <fs_output> TYPE ty_output.
+
+  IF g_grid IS NOT INITIAL.
+    CALL METHOD g_grid->check_changed_data
+      IMPORTING
+        e_valid = l_valid.
+  ENDIF.
+  IF l_valid EQ 'X'.
+    CALL METHOD g_grid->get_filtered_entries
+      IMPORTING
+        et_filtered_entries = lt_filter_entries.
+
+    LOOP AT lt_output ASSIGNING <fs_output> WHERE select IS INITIAL.
+      lv_selected_tabix = sy-tabix.
+      READ TABLE lt_filter_entries FROM lv_selected_tabix TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        <fs_output>-select = 'X'.
+      ENDIF.
+    ENDLOOP.
+
+    gs_stbl-row = 'X'.
+    gs_stbl-col = 'X'.
+
+    IF sy-batch NE 'X'.
+      CALL METHOD g_grid->refresh_table_display
+        EXPORTING
+          is_stable = gs_stbl.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+
+**************************************************************************************************************************
+
+*&---------------------------------------------------------------------*
+*& Form deselect_all
+*&---------------------------------------------------------------------*
+FORM deselect_all .
+
+  DATA: l_valid           TYPE char1,
+        lt_filter_entries TYPE lvc_t_fidx,
+        lv_selected_tabix TYPE sy-tabix.
+  FIELD-SYMBOLS: <fs_output> TYPE ty_output.
+
+  IF g_grid IS NOT INITIAL.
+    CALL METHOD g_grid->check_changed_data
+      IMPORTING
+        e_valid = l_valid.
+  ENDIF.
+  IF l_valid EQ 'X'.
+    CALL METHOD g_grid->get_filtered_entries
+      IMPORTING
+        et_filtered_entries = lt_filter_entries.
+
+    LOOP AT lt_output ASSIGNING <fs_output> WHERE select IS INITIAL.
+      lv_selected_tabix = sy-tabix.
+      READ TABLE lt_filter_entries FROM lv_selected_tabix TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        <fs_output>-select = ' '.
+      ENDIF.
+    ENDLOOP.
+
+    gs_stbl-row = 'X'.
+    gs_stbl-col = 'X'.
+
+    IF sy-batch NE 'X'.
+      CALL METHOD g_grid->refresh_table_display
+        EXPORTING
+          is_stable = gs_stbl.
+    ENDIF.
+  ENDIF.
+ENDFORM.
