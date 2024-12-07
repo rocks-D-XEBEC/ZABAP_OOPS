@@ -1,0 +1,1187 @@
+*&---------------------------------------------------------------------*
+*& Report ZPP_BMR_MASS_MASTER_CREATION
+*&---------------------------------------------------------------------*
+
+REPORT zpp_bmr_mass_master_creation.
+
+CLASS lcl_event_receiver DEFINITION DEFERRED.
+
+TYPES : BEGIN OF ty_output,
+          select      TYPE char1,
+          bukrs       TYPE ztpp_bmr_mhdr-bukrs,
+          plant       TYPE ztpp_bmr_mhdr-werks,
+          material    TYPE ztpp_bmr_mhdr-matnr,
+          verid       TYPE ztpp_bmr_mhdr-verid,
+          zversion    TYPE ztpp_bmr_mhdr-zversion,
+          zrev_reason TYPE ztpp_bmr_mhdr-zrev_reason,
+          created_on  TYPE ztpp_bmr_mhdr-erdat,
+          created_at  TYPE ztpp_bmr_mhdr-erzet,
+          created_by  TYPE ztpp_bmr_mhdr-ernam,
+          maktx       TYPE makt-maktx,
+          celltab     TYPE lvc_t_styl,
+        END OF ty_output.
+
+DATA : lt_bmr_mhdr      TYPE TABLE OF ztpp_bmr_mhdr,
+       ls_bmr_mhdr      TYPE  ztpp_bmr_mhdr,
+       lt_bmr_mhdr_new  TYPE TABLE OF ztpp_bmr_mhdr,
+       ls_bmr_mhdr_new  TYPE  ztpp_bmr_mhdr,
+       lt_bmr_mhdr_upl  TYPE TABLE OF ztpp_bmr_mhdr,
+       ls_bmr_mhdr_upd  TYPE  ztpp_bmr_mhdr,
+       lt_output        TYPE TABLE OF ty_output,
+       ls_output        TYPE ty_output,
+       lt_makt          TYPE TABLE OF makt,
+       ls_makt          TYPE  makt,
+       lt_mast          TYPE TABLE OF mast,
+       ls_mast          TYPE  mast,
+*---------------------------------NEW TABLES--------------------------------------------------
+       lt_bmr_ms10      TYPE  TABLE OF ztpp_bmr_ms10,
+       ls_bmr_ms10      TYPE  ztpp_bmr_ms10,
+       lt_bmr_ms10_upd  TYPE  TABLE OF ztpp_bmr_ms10,
+       ls_bmr_ms10_upd  TYPE  ztpp_bmr_ms10,         "---------ztpp_bmr_ms10
+       lt_bmr_ms2       TYPE TABLE OF ztpp_bmr_ms2,
+       ls_bmr_ms2       TYPE ztpp_bmr_ms2,
+       lt_bmr_ms2_upd   TYPE TABLE OF ztpp_bmr_ms2,
+       ls_bmr_ms2_upd   TYPE ztpp_bmr_ms2,           "----------ztpp_bmr_ms2
+       lt_bmr_ms3       TYPE TABLE OF ztpp_bmr_ms3,
+       ls_bmr_ms3       TYPE ztpp_bmr_ms3,
+       lt_bmr_ms3_upd   TYPE TABLE OF ztpp_bmr_ms3,
+       ls_bmr_ms3_upd   TYPE ztpp_bmr_ms3,           "----------ztpp_bmr_ms3
+       lt_bmr_ms4       TYPE TABLE OF ztpp_bmr_ms4,
+       ls_bmr_ms4       TYPE ztpp_bmr_ms4,
+       lt_bmr_ms4_upd   TYPE TABLE OF ztpp_bmr_ms4,
+       ls_bmr_ms4_upd   TYPE ztpp_bmr_ms4,           "----------ztpp_bmr_ms4
+       lt_bmr_ms5       TYPE TABLE OF ztpp_bmr_ms5,
+       ls_bmr_ms5_upd   TYPE ztpp_bmr_ms5,
+       lt_bmr_ms5_upd   TYPE TABLE OF ztpp_bmr_ms5,
+       ls_bmr_ms5       TYPE ztpp_bmr_ms5,          "-----------ztpp_bmr_ms5
+       lt_bmr_ms6a      TYPE TABLE OF ztpp_bmr_ms6a,
+       ls_bmr_ms6a      TYPE ztpp_bmr_ms6a,
+       lt_bmr_ms6a_upd  TYPE TABLE OF ztpp_bmr_ms6a,
+       ls_bmr_ms6a_upd  TYPE ztpp_bmr_ms6a,         "----------ztpp_bmr_ms6A
+       lt_bmr_ms6a1     TYPE TABLE OF ztpp_bmr_ms6a1,
+       ls_bmr_ms6a1     TYPE ztpp_bmr_ms6a1,
+       lt_bmr_ms6a1_upd TYPE TABLE OF ztpp_bmr_ms6a1,
+       ls_bmr_ms6a1_upd TYPE ztpp_bmr_ms6a1,         "---------ztpp_bmr_ms6A1
+       lt_bmr_ms6b      TYPE TABLE OF ztpp_bmr_ms6b,
+       ls_bmr_ms6b      TYPE ztpp_bmr_ms6b,
+       lt_bmr_ms6b_upd  TYPE TABLE OF ztpp_bmr_ms6b,
+       ls_bmr_ms6b_upd  TYPE ztpp_bmr_ms6b,         "----------ztpp_bmr_ms6B
+       lt_bmr_ms6c      TYPE TABLE OF ztpp_bmr_ms6c,
+       ls_bmr_ms6c      TYPE ztpp_bmr_ms6c,
+       lt_bmr_ms6c_upd  TYPE TABLE OF ztpp_bmr_ms6c,
+       ls_bmr_ms6c_upd  TYPE ztpp_bmr_ms6c,         "----------ztpp_bmr_ms6C
+       lt_bmr_ms6d      TYPE TABLE OF ztpp_bmr_ms6d,
+       ls_bmr_ms6d      TYPE ztpp_bmr_ms6d,
+       lt_bmr_ms6d_upd  TYPE TABLE OF ztpp_bmr_ms6d,
+       ls_bmr_ms6d_upd  TYPE ztpp_bmr_ms6d,         "---------ZTPP_BMR_MS6d
+       lt_bmr_ms6e1     TYPE TABLE OF ztpp_bmr_ms6e1,
+       ls_bmr_ms6e1     TYPE ztpp_bmr_ms6e1,
+       lt_bmr_ms6e1_upd TYPE TABLE OF ztpp_bmr_ms6e1,
+       ls_bmr_ms6e1_upd TYPE ztpp_bmr_ms6e1,        "---------ZTPP_BMR_MS6e1
+       lt_bmr_ms6e2     TYPE TABLE OF ztpp_bmr_ms6e2,
+       ls_bmr_ms6e2     TYPE ztpp_bmr_ms6e2,
+       lt_bmr_ms6e2_upd TYPE TABLE OF ztpp_bmr_ms6e2,
+       ls_bmr_ms6e2_upd TYPE ztpp_bmr_ms6e2,        "---------ZTPP_BMR_MS6e2
+       lt_bmr_ms7       TYPE TABLE OF ztpp_bmr_ms7,
+       ls_bmr_ms7       TYPE ztpp_bmr_ms7,
+       lt_bmr_ms7_upd   TYPE TABLE OF ztpp_bmr_ms7,
+       ls_bmr_ms7_upd   TYPE ztpp_bmr_ms7,          "---------ZTPP_bmr_ms7
+       lt_bmr_ms8       TYPE TABLE OF ztpp_bmr_ms8,
+       ls_bmr_ms8       TYPE ztpp_bmr_ms8,
+       lt_bmr_ms8_upd   TYPE TABLE OF ztpp_bmr_ms8,
+       ls_bmr_ms8_upd   TYPE ztpp_bmr_ms8,         "---------ZTPP_bmr_ms8
+       lt_bmr_ms9       TYPE TABLE OF ztpp_bmr_ms9,
+       ls_bmr_ms9       TYPE ztpp_bmr_ms9,
+       lt_bmr_ms9_upd   TYPE TABLE OF ztpp_bmr_ms9,
+       ls_bmr_ms9_upd   TYPE ztpp_bmr_ms9,         "---------ZTPP_bmr_ms9
+       lt_bmr_msec      TYPE TABLE OF ztpp_bmr_msec,
+       ls_bmr_msec      TYPE ztpp_bmr_msec,
+       lt_bmr_msec_upd  TYPE TABLE OF ztpp_bmr_msec,
+       ls_bmr_msec_upd  TYPE ztpp_bmr_msec,        "---------ZTPP_bmr_msec
+       lt_bmr_mtxt      TYPE TABLE OF ztpp_bmr_mtxt,
+       ls_bmr_mtxt      TYPE ztpp_bmr_mtxt,
+       lt_bmr_mtxt_upd  TYPE TABLE OF ztpp_bmr_mtxt,
+       ls_bmr_mtxt_upd  TYPE ztpp_bmr_mtxt,        "---------ZTPP_bmr_mtxt
+       lt_bmr_mbom      TYPE TABLE OF ztpp_bmr_mbom,
+       ls_bmr_mbom      TYPE ztpp_bmr_mbom,
+       lt_bmr_mbom_upd  TYPE TABLE OF ztpp_bmr_mbom,
+       ls_bmr_mbom_upd  TYPE ztpp_bmr_mbom,        "-------- ztpp_bmr_mbom (special Table)
+       lt_bmr_mstat     TYPE TABLE OF ztpp_bmr_mstat,
+       ls_bmr_mstat     TYPE ztpp_bmr_mstat,
+       lt_bmr_mstat_upd TYPE TABLE OF ztpp_bmr_mstat,
+       ls_bmr_mstat_upd TYPE ztpp_bmr_mstat,       "-------- ztpp_bmr_mstat (special Table)
+       lt_bmr_ms6a2     TYPE TABLE OF ztpp_bmr_ms6a2,
+       ls_bmr_ms6a2     TYPE ztpp_bmr_ms6a2,
+       lt_bmr_ms6a2_upd TYPE TABLE OF ztpp_bmr_ms6a2,
+       ls_bmr_ms6a2_upd TYPE ztpp_bmr_ms6a2.       "---------ztpp_bmr_ms6A1 (special Table)
+
+*---------------------------------------------------------------------------------------------
+DATA: ok_code            LIKE sy-ucomm,
+      save_ok            LIKE sy-ucomm,
+      g_grid             TYPE REF TO cl_gui_alv_grid,
+      g_custom_container TYPE REF TO cl_gui_custom_container,
+      gt_fieldcat        TYPE lvc_t_fcat,
+      gs_layout          TYPE lvc_s_layo,
+      gs_variant         TYPE disvariant,
+      g_event_receiver   TYPE REF TO lcl_event_receiver,
+      gt_celltab         TYPE lvc_t_styl,
+      gs_celltab         TYPE lvc_s_styl,
+      gs_stbl            TYPE lvc_s_stbl,
+      ls_fcat            TYPE lvc_s_fcat.
+
+FIELD-SYMBOLS: <fs_output> TYPE ty_output.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME.
+  PARAMETERS :    p_plant TYPE ztpp_bmr_mhdr-werks OBLIGATORY.
+  SELECT-OPTIONS: s_mat  FOR ls_output-material.
+  SELECT-OPTIONS: s_prd  FOR ls_output-verid.
+  SELECT-OPTIONS: s_date FOR ls_output-created_on.
+SELECTION-SCREEN END OF BLOCK b1.
+
+START-OF-SELECTION.
+  PERFORM get_data.
+  IF lt_bmr_mhdr IS NOT INITIAL.
+    PERFORM process_data.
+    IF lt_output IS NOT INITIAL.
+      CALL SCREEN 100.
+    ELSE.
+      MESSAGE 'No Data Found' TYPE 'S'.
+    ENDIF.
+  ELSE.
+    MESSAGE 'No Data Found' TYPE 'S'.
+  ENDIF.
+*&---------------------------------------------------------------------*
+*& Form GET_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM get_data .
+
+  SELECT *
+    INTO TABLE lt_bmr_mhdr
+    FROM ztpp_bmr_mhdr
+    WHERE werks = p_plant
+    AND   matnr IN s_mat
+    AND   verid IN s_prd
+    AND   erdat IN s_date
+    AND   zbmr_status = '04'.
+  IF sy-subrc EQ 0.
+    SELECT *
+    INTO TABLE lt_bmr_mhdr_new
+    FROM ztpp_bmr_mhdr
+    WHERE werks = p_plant
+    AND   matnr IN s_mat
+    AND   verid IN s_prd.
+
+    SELECT *
+    INTO TABLE lt_makt
+    FROM makt
+    FOR ALL ENTRIES IN lt_bmr_mhdr
+    WHERE matnr = lt_bmr_mhdr-matnr
+    AND spras = sy-langu.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms10
+      FROM ztpp_bmr_ms10
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms2
+      FROM ztpp_bmr_ms2
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms3
+      FROM ztpp_bmr_ms3
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms4
+      FROM ztpp_bmr_ms4
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms5
+      FROM ztpp_bmr_ms5
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+       WHERE werks = lt_bmr_mhdr-werks
+       AND   matnr = lt_bmr_mhdr-matnr
+       AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms6a
+      FROM ztpp_bmr_ms6a
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+       WHERE werks = lt_bmr_mhdr-werks
+       AND   matnr = lt_bmr_mhdr-matnr
+       AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms6a1
+      FROM ztpp_bmr_ms6a1
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms6b
+      FROM ztpp_bmr_ms6b
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms6c
+      FROM ztpp_bmr_ms6c
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms6d
+      FROM ztpp_bmr_ms6d
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms6e1
+      FROM ztpp_bmr_ms6e1
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms6e2
+      FROM ztpp_bmr_ms6e2
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms7
+      FROM ztpp_bmr_ms7
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms8
+      FROM ztpp_bmr_ms7
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND   matnr = lt_bmr_mhdr-matnr
+      AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms9
+      FROM ztpp_bmr_ms9
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+     WHERE werks = lt_bmr_mhdr-werks
+     AND   matnr = lt_bmr_mhdr-matnr
+     AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_msec
+      FROM ztpp_bmr_msec
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+     WHERE werks = lt_bmr_mhdr-werks
+     AND   matnr = lt_bmr_mhdr-matnr
+     AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_mtxt
+      FROM ztpp_bmr_mtxt
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+     WHERE werks = lt_bmr_mhdr-werks
+     AND   matnr = lt_bmr_mhdr-matnr
+     AND   verid = lt_bmr_mhdr-verid.
+
+    SELECT *
+      INTO TABLE lt_bmr_mstat
+      FROM ztpp_bmr_mstat
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE matnr = lt_bmr_mhdr-matnr
+      AND werks = lt_bmr_mhdr-werks
+      AND verid = lt_bmr_mhdr-verid
+      AND erdat = lt_bmr_mhdr-erdat
+      AND zversion = '01'.
+
+    SELECT *
+      INTO TABLE lt_bmr_ms6a2
+      FROM ztpp_bmr_ms6a2
+      FOR ALL ENTRIES IN lt_bmr_mhdr
+      WHERE werks = lt_bmr_mhdr-werks
+      AND verid = lt_bmr_mhdr-verid
+      AND erdat = lt_bmr_mhdr-erdat
+      AND zparameter_type = 'MATERIAL'.
+
+    SELECT *
+      INTO TABLE lt_bmr_mbom
+      FROM  ztpp_bmr_mbom
+      FOR ALL ENTRIES IN lt_bmr_ms6a2
+      WHERE matnr = lt_bmr_ms6a2-matnr
+      AND werks = lt_bmr_ms6a2-werks
+      AND verid = lt_bmr_ms6a2-verid.
+
+
+
+*    SELECT *
+*      INTO TABLE lt_mast
+*      FROM mast
+*      FOR ALL ENTRIES IN lt_bmr_mbom
+*      WHERE matnr = lt_bmr_mbom-matnr
+*      AND werks   = lt_bmr_mbom-werks.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form PROCESS_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM process_data .
+  DATA: lv_disable TYPE xfeld.
+
+  SORT lt_bmr_mhdr_new DESCENDING BY werks matnr verid zversion.
+
+  LOOP AT lt_bmr_mhdr INTO ls_bmr_mhdr .                                      "Higher version
+    ls_output-bukrs      = ls_bmr_mhdr-bukrs.
+    ls_output-plant      = ls_bmr_mhdr-werks.
+    ls_output-material   = ls_bmr_mhdr-matnr.
+    ls_output-verid      = ls_bmr_mhdr-verid.
+    ls_output-zversion   = ls_bmr_mhdr-zversion.
+    ls_output-created_on = ls_bmr_mhdr-erdat.
+    ls_output-created_at = ls_bmr_mhdr-erzet.
+    ls_output-created_by = ls_bmr_mhdr-ernam.
+    READ TABLE lt_makt INTO ls_makt WITH KEY matnr = ls_bmr_mhdr-matnr.
+    IF sy-subrc = 0.
+      ls_output-maktx = ls_makt-maktx.
+    ENDIF.
+    READ TABLE lt_bmr_mhdr_new INTO ls_bmr_mhdr_new WITH KEY werks = ls_bmr_mhdr-werks
+                                                             matnr = ls_bmr_mhdr-matnr
+                                                             verid = ls_bmr_mhdr-verid.
+    IF sy-subrc EQ 0.
+      IF ls_bmr_mhdr_new-zversion GT ls_bmr_mhdr-zversion.
+        REFRESH: gt_celltab.
+        gs_celltab-fieldname = 'SELECT'.
+        gs_celltab-style = cl_gui_alv_grid=>mc_style_disabled.
+        INSERT gs_celltab INTO TABLE gt_celltab.
+
+        gs_celltab-fieldname = 'ZREV_REASON'.
+        gs_celltab-style = cl_gui_alv_grid=>mc_style_disabled.
+        INSERT gs_celltab INTO TABLE gt_celltab.
+        INSERT LINES OF gt_celltab INTO TABLE ls_output-celltab.
+      ELSE.
+        REFRESH: gt_celltab.
+        gs_celltab-fieldname = 'SELECT'.
+        gs_celltab-style = cl_gui_alv_grid=>mc_style_enabled.
+        INSERT gs_celltab INTO TABLE gt_celltab.
+
+        gs_celltab-fieldname = 'ZREV_REASON'.
+        gs_celltab-style = cl_gui_alv_grid=>mc_style_enabled.
+        INSERT gs_celltab INTO TABLE gt_celltab.
+        INSERT LINES OF gt_celltab INTO TABLE ls_output-celltab.
+      ENDIF.
+    ENDIF.
+    APPEND ls_output TO lt_output.
+    CLEAR ls_output.
+  ENDLOOP.
+ENDFORM.
+***************************************************LOCAL CLASS DEFINITION********************************************
+CLASS lcl_event_receiver DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      handle_toolbar
+        FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object e_interactive,
+
+      handle_user_command
+        FOR EVENT user_command OF cl_gui_alv_grid
+        IMPORTING e_ucomm.
+ENDCLASS.
+**************************************************LOCAL CLASS IMPLEMENTATION********************************************
+CLASS lcl_event_receiver IMPLEMENTATION.
+  METHOD handle_toolbar.
+    DATA: ls_menu    TYPE stb_btnmnu,
+          ls_toolbar TYPE stb_button.
+    MOVE 3 TO ls_toolbar-butn_type.
+    APPEND ls_toolbar TO e_object->mt_toolbar.
+
+    CLEAR ls_toolbar.
+    MOVE 'SELECT_ALL' TO ls_toolbar-function.
+    MOVE icon_select_all TO ls_toolbar-icon.
+    MOVE 'Select All'(111) TO ls_toolbar-quickinfo.
+    MOVE space TO ls_toolbar-disabled.
+    APPEND ls_toolbar TO e_object->mt_toolbar.
+
+    CLEAR ls_toolbar.
+    MOVE 'DESELECT_ALL' TO ls_toolbar-function.
+    MOVE icon_deselect_all TO ls_toolbar-icon.
+    MOVE 'De-select All'(111) TO ls_toolbar-quickinfo.
+    MOVE space TO ls_toolbar-disabled.
+    APPEND ls_toolbar TO e_object->mt_toolbar.
+
+    CLEAR ls_toolbar.
+    MOVE 'SAVE' TO ls_toolbar-function.
+    MOVE icon_alv_variant_save TO ls_toolbar-icon.
+    MOVE 'Save' TO ls_toolbar-text.
+    MOVE 'SAVE DATA'(111) TO ls_toolbar-quickinfo.
+    MOVE space TO ls_toolbar-disabled.
+    APPEND ls_toolbar TO e_object->mt_toolbar.
+  ENDMETHOD.
+  METHOD handle_user_command.
+    CASE e_ucomm.
+      WHEN 'SAVE'.
+        PERFORM save_data.
+      WHEN 'SELECT_ALL'.
+        PERFORM select_all.
+      WHEN 'DESELECT_ALL'.
+        PERFORM deselect_all.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDMETHOD.
+ENDCLASS.
+*&---------------------------------------------------------------------*
+*& Module STATUS_0100 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'ZBMR_MASS_CREATE'.
+  IF g_grid IS INITIAL.
+    PERFORM create_and_init_alv CHANGING lt_output
+                                         gt_fieldcat
+                                         gs_layout .
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+    WHEN OTHERS.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form create_and_init_alv
+*&---------------------------------------------------------------------*
+**& text
+**&---------------------------------------------------------------------*
+**& -->  p1        text
+**& <--  p2        text
+**&---------------------------------------------------------------------*
+FORM create_and_init_alv CHANGING pt_outtab LIKE lt_output[]
+                         pt_fieldcat TYPE lvc_t_fcat
+                         ps_layout TYPE lvc_s_layo.
+
+  DATA: lt_exclude TYPE ui_functions.
+
+  CREATE OBJECT g_grid
+    EXPORTING
+      i_parent = cl_gui_custom_container=>screen0.
+
+  PERFORM display_fcat CHANGING pt_fieldcat.
+  PERFORM exclude_tb_functions CHANGING lt_exclude.
+
+  gs_variant-report = sy-repid.
+  gs_layout-stylefname = 'CELLTAB'.
+  gs_layout-zebra = 'X'.
+  gs_layout-cwidth_opt = 'X'.
+  gs_layout-no_rowmark = 'X'.
+  gs_layout-no_rowins = 'X'.
+
+  CALL METHOD g_grid->set_table_for_first_display
+    EXPORTING
+      is_variant           = gs_variant
+      i_save               = 'A'
+      is_layout            = ps_layout
+      it_toolbar_excluding = lt_exclude
+    CHANGING
+      it_fieldcatalog      = gt_fieldcat
+      it_outtab            = lt_output.
+
+  CREATE OBJECT g_event_receiver.
+
+  CALL METHOD g_grid->set_ready_for_input
+    EXPORTING
+      i_ready_for_input = 1.
+
+  CALL METHOD g_grid->register_edit_event
+    EXPORTING
+      i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+
+  SET HANDLER g_event_receiver->handle_user_command FOR g_grid.
+  SET HANDLER g_event_receiver->handle_toolbar FOR g_grid.
+  CALL METHOD g_grid->set_toolbar_interactive.
+
+  CALL METHOD g_grid->refresh_table_display.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form DISPLAY_FCAT
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM display_fcat CHANGING pt_fieldcat  TYPE lvc_t_fcat.
+  DATA :pos TYPE i.
+
+  CLEAR: pos, ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'SELECT'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'Select'.
+  ls_fcat-checkbox = 'X'.
+  APPEND ls_fcat TO gt_fieldcat.
+
+  CLEAR: ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'PLANT'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'Plant'.
+  ls_fcat-ref_table = 'ZTPP_BMR_MHDR'.
+  ls_fcat-ref_field = 'WERKS'.
+  APPEND ls_fcat TO gt_fieldcat.
+
+  CLEAR: ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'MATERIAL'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'Material'.
+  ls_fcat-ref_table = 'ZTPP_BMR_MHDR'.
+  ls_fcat-ref_field = 'MATNR'.
+  ls_fcat-convexit = 'ALPHA'.
+  APPEND ls_fcat TO gt_fieldcat.
+
+  CLEAR: ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'MAKTX'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'Material Description'.
+  ls_fcat-ref_table = 'MAKT'.
+  ls_fcat-ref_field = 'MAKTX'.
+  ls_fcat-lowercase = 'X'.
+  APPEND ls_fcat TO gt_fieldcat.
+
+  CLEAR: ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'VERID'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'Production Version'.
+  ls_fcat-ref_table = 'ZTPP_BMR_MHDR'.
+  ls_fcat-ref_field = 'VERID'.
+  APPEND ls_fcat TO gt_fieldcat.
+
+  CLEAR: ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'ZVERSION'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'Version'.
+  ls_fcat-ref_table = 'ZTPP_BMR_MHDR'.
+  ls_fcat-ref_field = 'ZVERSION'.
+  APPEND ls_fcat TO gt_fieldcat.
+
+  CLEAR: ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'CREATED_ON'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'Created On'.
+  ls_fcat-ref_table = 'ZTPP_BMR_MHDR'.
+  ls_fcat-ref_field = 'ERDAT'.
+  APPEND ls_fcat TO gt_fieldcat.
+
+  CLEAR: ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'CREATED_AT'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'Created At'.
+  ls_fcat-ref_table = 'ZTPP_BMR_MHDR'.
+  ls_fcat-ref_field = 'ERZET'.
+  APPEND ls_fcat TO gt_fieldcat.
+
+  CLEAR: ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'CREATED_BY'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'Created By'.
+  ls_fcat-ref_table = 'ZTPP_BMR_MHDR'.
+  ls_fcat-ref_field = 'ERNAM'.
+  APPEND ls_fcat TO gt_fieldcat.
+
+  CLEAR: ls_fcat.
+  pos = pos + 1.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos.
+  ls_fcat-fieldname = 'ZREV_REASON'.
+  ls_fcat-tabname = 'LT_OUTPUT'.
+  ls_fcat-coltext = 'BMR Revision Reason'.
+  ls_fcat-ref_table = 'ZTPP_BMR_MHDR'.
+  ls_fcat-ref_field = 'ZREV_REASON'.
+  APPEND ls_fcat TO gt_fieldcat.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form exclude_tb_functions
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      <-- GT_EXCLUDE
+*&---------------------------------------------------------------------*
+FORM exclude_tb_functions  CHANGING pt_exclude TYPE ui_functions.
+  DATA : ls_exclude TYPE ui_func.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_delete_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_append_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_insert_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_move_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste_new_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_refresh.
+  APPEND ls_exclude TO pt_exclude.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form save_data
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM save_data .
+
+  DATA : lt_bmr_mhdr_new TYPE TABLE OF ztpp_bmr_mhdr,
+         ls_bmr_mhdr_new TYPE  ztpp_bmr_mhdr,
+         lt_stb          TYPE TABLE OF stpox,
+         ls_stb          TYPE stpox,
+         lt_matcat       TYPE TABLE OF cscmat,
+         ls_topmat       TYPE cstmat.
+
+  SELECT *
+    INTO TABLE lt_bmr_mhdr_new
+    FROM ztpp_bmr_mhdr
+    FOR ALL ENTRIES IN lt_output
+    WHERE matnr = lt_output-material
+      AND werks = lt_output-plant
+      AND verid = lt_output-verid.
+
+  IF g_grid IS NOT INITIAL.
+    CALL METHOD g_grid->check_changed_data.
+
+    LOOP AT lt_output ASSIGNING <fs_output> WHERE select = 'X'.
+      CLEAR ls_bmr_mhdr.
+      READ TABLE lt_bmr_mhdr INTO ls_bmr_mhdr WITH KEY matnr = <fs_output>-material
+                                                       werks = <fs_output>-plant
+                                                       verid = <fs_output>-verid
+                                                       zversion = <fs_output>-zversion.
+      IF sy-subrc = 0.                                                                       "ztpp_bmr_mhdr
+        MOVE-CORRESPONDING ls_bmr_mhdr TO ls_bmr_mhdr_upd.
+        ls_bmr_mhdr_upd-zversion = <fs_output>-zversion + 1.
+        ls_bmr_mhdr_upd-zbmr_status = '02'.
+        ls_bmr_mhdr_upd-erdat = sy-datum.
+        ls_bmr_mhdr_upd-erzet = sy-uzeit.
+        ls_bmr_mhdr_upd-ernam = sy-uname.
+        ls_bmr_mhdr_upd-zref_version = <fs_output>-zversion.
+        CLEAR: ls_bmr_mhdr_upd-aedat, ls_bmr_mhdr_upd-aezet, ls_bmr_mhdr_upd-aenam.
+*        MODIFY ztpp_bmr_mhdr FROM ls_bmr_mhdr_upd.
+
+
+        LOOP AT lt_bmr_ms10 INTO ls_bmr_ms10 WHERE matnr = <fs_output>-material               "ztpp_bmr_ms10
+                                              AND werks = <fs_output>-plant
+                                              AND verid = <fs_output>-verid
+                                              AND zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms10 TO ls_bmr_ms10_upd.
+          ls_bmr_ms10_upd-zversion = ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms10_upd-erdat = sy-datum.
+          ls_bmr_ms10_upd-erzet = sy-uzeit.
+          ls_bmr_ms10_upd-ernam = sy-uname.
+          CLEAR :  ls_bmr_ms10_upd-aedat ,ls_bmr_ms10_upd-aezet ,ls_bmr_ms10_upd-aenam.
+          APPEND ls_bmr_ms10_upd TO lt_bmr_ms10_upd.
+          CLEAR ls_bmr_ms10_upd.
+        ENDLOOP.
+        IF lt_bmr_ms10_upd IS NOT INITIAL.
+*          MODIFY ztpp_bmr_ms10 FROM TABLE lt_bmr_ms10_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms2 INTO ls_bmr_ms2 WHERE matnr = <fs_output>-material                   "ztpp_bmr_ms2
+                                           AND werks = <fs_output>-plant
+                                            AND  verid = <fs_output>-verid
+                                           AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms2 TO ls_bmr_ms2_upd.
+          ls_bmr_ms2_upd-zversion = ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms2_upd-erdat = sy-datum.
+          ls_bmr_ms2_upd-erzet = sy-uzeit.
+          ls_bmr_ms2_upd-ernam = sy-uname.
+          CLEAR :  ls_bmr_ms2_upd-aedat ,ls_bmr_ms2_upd-aezet ,ls_bmr_ms2_upd-aenam.
+          APPEND ls_bmr_ms2_upd TO lt_bmr_ms2_upd.
+          CLEAR ls_bmr_ms2_upd.
+        ENDLOOP.
+        IF lt_bmr_ms2_upd IS NOT INITIAL.
+*        MODIFY ztpp_bmr_ms2 FROM TABLE Lt_bmr_ms2_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms3 INTO ls_bmr_ms3 WHERE matnr = <fs_output>-material                    "ztpp_bmr_ms3
+                                           AND werks = <fs_output>-plant
+                                           AND  verid = <fs_output>-verid
+                                           AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms3 TO ls_bmr_ms3_upd.
+          ls_bmr_ms3_upd-zversion = ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms3_upd-erdat    = sy-datum.
+          ls_bmr_ms3_upd-erzet    = sy-uzeit.
+          ls_bmr_ms3_upd-ernam    = sy-uname.
+          CLEAR :  ls_bmr_ms3_upd-aedat ,ls_bmr_ms3_upd-aezet ,ls_bmr_ms3_upd-aenam.
+          APPEND ls_bmr_ms3_upd TO lt_bmr_ms3_upd.
+          CLEAR ls_bmr_ms3_upd.
+        ENDLOOP.
+        IF lt_bmr_ms3_upd IS NOT INITIAL.
+*         MODIFY ztpp_bmr_ms3 FROM TABLE lt_bmr_ms3_upd.
+        ENDIF.
+
+
+        LOOP AT lt_bmr_ms4 INTO ls_bmr_ms4 WHERE matnr = <fs_output>-material                      "ZTPP_BMR_MS4
+                                            AND werks = <fs_output>-plant
+                                            AND  verid = <fs_output>-verid
+                                            AND  zversion = <fs_output>-zversion.
+
+          MOVE-CORRESPONDING ls_bmr_ms4 TO ls_bmr_ms4_upd.
+          ls_bmr_ms4_upd-zversion = ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms4_upd-erdat   =  sy-datum.
+          ls_bmr_ms4_upd-erzet  =   sy-uzeit.
+          ls_bmr_ms4_upd-ernam  =   sy-uname.
+          CLEAR :  ls_bmr_ms4_upd-aedat ,ls_bmr_ms4_upd-aezet ,ls_bmr_ms4_upd-aenam..
+          APPEND ls_bmr_ms4_upd TO lt_bmr_ms4_upd.
+          CLEAR ls_bmr_ms4_upd.
+        ENDLOOP.
+        IF lt_bmr_ms4_upd IS NOT INITIAL.
+*          MODIFY ZTPP_BMR_MS4 FROM TABLE lt_bmr_ms4_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms5 INTO ls_bmr_ms5  WHERE matnr = <fs_output>-material                        "ZTPP_BMR_MS5
+                                            AND werks = <fs_output>-plant
+                                             AND  verid = <fs_output>-verid
+                                             AND  zversion = <fs_output>-zversion.
+
+          MOVE-CORRESPONDING ls_bmr_ms5 TO ls_bmr_ms5_upd.
+          ls_bmr_ms5_upd-zversion = ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms5_upd-erdat    =  sy-datum.
+          ls_bmr_ms5_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms5_upd-ernam    =  sy-uname.
+          CLEAR : ls_bmr_ms5_upd-aedat ,ls_bmr_ms5_upd-aezet ,ls_bmr_ms5_upd-aenam..
+          APPEND ls_bmr_ms5_upd TO lt_bmr_ms5_upd.
+          CLEAR ls_bmr_ms5_upd.
+        ENDLOOP.
+        IF lt_bmr_ms5_upd IS NOT INITIAL.
+*           MODIFY ZTPP_BMR_MS5 FROM TABLE Lt_bmr_ms5_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms6a INTO ls_bmr_ms6a WHERE matnr = <fs_output>-material                        "ZTPP_BMR_MS6A
+                                            AND werks = <fs_output>-plant
+                                            AND  verid = <fs_output>-verid
+                                            AND  zversion = <fs_output>-zversion.
+
+          MOVE-CORRESPONDING ls_bmr_ms6a TO ls_bmr_ms6a_upd.
+          ls_bmr_ms6a_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms6a_upd-erdat    =  sy-datum.
+          ls_bmr_ms6a_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms6a_upd-ernam    =  sy-uname.
+          CLEAR :  ls_bmr_ms6a_upd-aedat ,ls_bmr_ms6a_upd-aezet ,ls_bmr_ms6a_upd-aenam.
+          APPEND ls_bmr_ms6a_upd TO lt_bmr_ms6a_upd.
+          CLEAR ls_bmr_ms6a_upd.
+        ENDLOOP.
+        IF lt_bmr_ms6a_upd IS NOT INITIAL.
+*           MODIFY ZTPP_BMR_MS6A FROM TABLE Lt_bmr_ms6a_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms6a1 INTO ls_bmr_ms6a1 WHERE matnr = <fs_output>-material                      "ZTPP_BMR_MS6A1
+                                          AND werks = <fs_output>-plant
+                                           AND  verid = <fs_output>-verid
+                                           AND  zversion = <fs_output>-zversion.
+
+          MOVE-CORRESPONDING ls_bmr_ms6a1 TO ls_bmr_ms6a1_upd.
+          ls_bmr_ms6a1_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms6a1_upd-erdat    =  sy-datum.
+          ls_bmr_ms6a1_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms6a1_upd-ernam    =  sy-uname.
+          CLEAR :  ls_bmr_ms6a1_upd-aedat ,ls_bmr_ms6a1_upd-aezet ,ls_bmr_ms6a1_upd-aenam.
+          APPEND ls_bmr_ms6a1_upd TO lt_bmr_ms6a1_upd.
+          CLEAR ls_bmr_ms6a1_upd.
+        ENDLOOP.
+        IF lt_bmr_ms6a1_upd IS NOT INITIAL.
+*           MODIFY ZTPP_BMR_MS6A1 FROM table Lt_bmr_ms6a1_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms6b INTO ls_bmr_ms6b WHERE matnr = <fs_output>-material                         "ZTPP_BMR_MS6b
+                                             AND werks = <fs_output>-plant
+                                             AND  verid = <fs_output>-verid
+                                             AND  zversion = <fs_output>-zversion.
+
+          MOVE-CORRESPONDING ls_bmr_ms6b TO ls_bmr_ms6b_upd.
+          ls_bmr_ms6b_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms6b_upd-erdat    =  sy-datum.
+          ls_bmr_ms6b_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms6b_upd-ernam    =  sy-uname.
+          CLEAR :  ls_bmr_ms6b_upd-aedat ,ls_bmr_ms6b_upd-aezet ,ls_bmr_ms6b_upd-aenam.
+          APPEND ls_bmr_ms6b_upd TO lt_bmr_ms6b_upd.
+          CLEAR ls_bmr_ms6b_upd.
+        ENDLOOP.
+        IF lt_bmr_ms6b_upd IS NOT INITIAL.
+*           MODIFY ZTPP_BMR_MS6b FROM table Lt_bmr_ms6b_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms6c INTO ls_bmr_ms6c WHERE matnr = <fs_output>-material                          "ZTPP_BMR_MS6c
+                                            AND werks = <fs_output>-plant
+                                             AND  verid = <fs_output>-verid
+                                             AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms6c TO ls_bmr_ms6c_upd.
+          ls_bmr_ms6c_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms6c_upd-erdat    =  sy-datum.
+          ls_bmr_ms6c_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms6c_upd-ernam    =  sy-uname.
+          CLEAR :  ls_bmr_ms6c_upd-aedat ,ls_bmr_ms6c_upd-aezet ,ls_bmr_ms6c_upd-aenam.
+          APPEND ls_bmr_ms6c_upd TO lt_bmr_ms6c_upd.
+          CLEAR ls_bmr_ms6c_upd.
+        ENDLOOP.
+        IF lt_bmr_ms6c_upd IS NOT INITIAL.
+*          Modify ZTPP_BMR_MS6c from table lt_bmr_ms6c_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms6d INTO ls_bmr_ms6d WHERE matnr = <fs_output>-material                          "ZTPP_BMR_MS6d
+                                              AND werks = <fs_output>-plant
+                                              AND  verid = <fs_output>-verid
+                                              AND  zversion = <fs_output>-zversion.
+
+          MOVE-CORRESPONDING ls_bmr_ms6d TO ls_bmr_ms6d_upd.
+          ls_bmr_ms6d_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms6d_upd-erdat    =  sy-datum.
+          ls_bmr_ms6d_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms6d_upd-ernam    =  sy-uname.
+          CLEAR : ls_bmr_ms6d_upd-aedat ,ls_bmr_ms6d_upd-aezet ,ls_bmr_ms6d_upd-aenam.
+          APPEND ls_bmr_ms6d_upd TO lt_bmr_ms6d_upd.
+          CLEAR ls_bmr_ms6d_upd.
+        ENDLOOP.
+        IF lt_bmr_ms6d_upd IS NOT INITIAL.
+*         Modify ZTPP_BMR_MS6d from table LT_bmr_ms6D_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms6e1 INTO ls_bmr_ms6e1 WHERE matnr = <fs_output>-material                        "ZTPP_BMR_MS6e1
+                                               AND werks = <fs_output>-plant
+                                                AND  verid = <fs_output>-verid
+                                                AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms6e1 TO ls_bmr_ms6e1_upd.
+          ls_bmr_ms6e1_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms6e1_upd-erdat    =  sy-datum.
+          ls_bmr_ms6e1_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms6e1_upd-ernam    =  sy-uname.
+          APPEND ls_bmr_ms6e1_upd TO lt_bmr_ms6e1_upd.
+          CLEAR ls_bmr_ms6e1_upd.
+        ENDLOOP.
+        IF lt_bmr_ms6e1_upd IS NOT INITIAL.
+*         Modify ZTPP_BMR_MS6e1 from table lt_bmr_ms6e1_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms6e2 INTO ls_bmr_ms6e2 WHERE matnr = <fs_output>-material                       "ZTPP_BMR_MS6e2
+                                                AND werks = <fs_output>-plant
+                                                AND  verid = <fs_output>-verid
+                                                AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms6e2 TO ls_bmr_ms6e2_upd.
+          ls_bmr_ms6e2_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms6e2_upd-erdat    =  sy-datum.
+          ls_bmr_ms6e2_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms6e2_upd-ernam    =  sy-uname.
+          APPEND ls_bmr_ms6e2_upd TO lt_bmr_ms6e2_upd.
+          CLEAR ls_bmr_ms6e1_upd.
+        ENDLOOP.
+        IF lt_bmr_ms6e2_upd IS NOT INITIAL .
+*           Modify ZTPP_BMR_MS6E2 FROM TABLE lt_bmr_ms6e2_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms7 INTO ls_bmr_ms7 WHERE matnr = <fs_output>-material                          "ZTPP_BMR_MS7
+                                            AND werks = <fs_output>-plant
+                                            AND  verid = <fs_output>-verid
+                                            AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms7 TO ls_bmr_ms7_upd.
+          ls_bmr_ms7_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms7_upd-erdat    =  sy-datum.
+          ls_bmr_ms7_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms7_upd-ernam    =  sy-uname.
+          CLEAR : ls_bmr_ms7_upd-aedat ,ls_bmr_ms7_upd-aezet ,ls_bmr_ms7_upd-aenam.
+          APPEND ls_bmr_ms7_upd TO lt_bmr_ms6e2_upd.
+          CLEAR ls_bmr_ms7_upd.
+        ENDLOOP.
+        IF lt_bmr_ms7_upd IS NOT INITIAL.
+*           Modify ZTPP_BMR_MS7 FROM TABLE lt_bmr_ms7_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms8 INTO ls_bmr_ms8 WHERE matnr = <fs_output>-material                          "ztpp_bmr_ms8
+                                             AND werks = <fs_output>-plant
+                                             AND  verid = <fs_output>-verid
+                                             AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms8 TO ls_bmr_ms8_upd.
+          ls_bmr_ms8_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms8_upd-erdat    =  sy-datum.
+          ls_bmr_ms8_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms8_upd-ernam    =  sy-uname.
+          CLEAR : ls_bmr_ms8_upd-aedat ,ls_bmr_ms8_upd-aezet ,ls_bmr_ms8_upd-aenam.
+          APPEND ls_bmr_ms8_upd TO lt_bmr_ms8_upd.
+          CLEAR ls_bmr_ms8_upd.
+        ENDLOOP.
+        IF lt_bmr_ms8_upd IS NOT INITIAL.
+*         Modify ztpp_bmr_ms8 From table lt_bmr_ms8_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_ms9 INTO ls_bmr_ms9 WHERE matnr = <fs_output>-material                         "ztpp_bmr_ms9
+                                             AND werks = <fs_output>-plant
+                                             AND  verid = <fs_output>-verid
+                                             AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms9 TO ls_bmr_ms9_upd.
+          ls_bmr_ms9_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms9_upd-erdat    =  sy-datum.
+          ls_bmr_ms9_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms9_upd-ernam    =  sy-uname.
+          CLEAR :ls_bmr_ms9_upd-aedat ,ls_bmr_ms9_upd-aezet ,ls_bmr_ms9_upd-aenam.
+          APPEND ls_bmr_ms9_upd TO lt_bmr_ms9_upd.
+          CLEAR ls_bmr_ms9_upd.
+        ENDLOOP.
+        IF lt_bmr_ms9_upd IS NOT INITIAL.
+*         Modify ztpp_bmr_ms9 From table lt_bmr_ms9_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_msec INTO ls_bmr_msec WHERE matnr = <fs_output>-material                       "ztpp_bmr_msec
+                                                AND werks = <fs_output>-plant
+                                                AND  verid = <fs_output>-verid
+                                                AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_msec TO ls_bmr_msec_upd.
+          ls_bmr_msec_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          APPEND ls_bmr_msec_upd TO lt_bmr_msec_upd.
+          CLEAR  ls_bmr_msec_upd.
+        ENDLOOP.
+        IF lt_bmr_msec_upd IS NOT INITIAL.
+*         Modify ztpp_bmr_msec From table lt_bmr_msec_upd.
+        ENDIF.
+
+        LOOP AT lt_bmr_mtxt INTO ls_bmr_mtxt WHERE  matnr = <fs_output>-material                       "ztpp_bmr_mtxt
+                                                      AND werks = <fs_output>-plant
+                                                      AND  verid = <fs_output>-verid
+                                                      AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_mtxt TO ls_bmr_mtxt_upd.
+          ls_bmr_mtxt_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_mtxt_upd-erdat    =  sy-datum.
+          ls_bmr_mtxt_upd-erzet    =  sy-uzeit.
+          ls_bmr_mtxt_upd-ernam    =  sy-uname.
+          CLEAR : ls_bmr_mtxt_upd-aedat ,ls_bmr_mtxt_upd-aezet ,ls_bmr_mtxt_upd-aenam.
+          APPEND ls_bmr_mtxt_upd TO lt_bmr_mtxt_upd.
+          CLEAR ls_bmr_mtxt_upd.
+          IF lt_bmr_mtxt_upd IS NOT INITIAL.
+*         Modify ztpp_bmr_mtxt from table lt_bmr_mtxt_upd
+          ENDIF.
+        ENDLOOP.
+
+        LOOP AT lt_bmr_mstat INTO ls_bmr_mstat
+                             WHERE zbmr_status GE '01' AND zbmr_status LE '02'.                         "ZTPP_BMR_MSTAT
+          MOVE-CORRESPONDING ls_bmr_mstat TO ls_bmr_mstat_upd.
+          ls_bmr_mstat_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_mstat_upd-erdat    =  sy-datum.
+          ls_bmr_mstat_upd-erzet    =  sy-uzeit.
+          ls_bmr_mstat_upd-ernam    =  sy-uname.
+          APPEND ls_bmr_mstat_upd TO lt_bmr_mstat_upd.
+          CLEAR ls_bmr_mstat_upd.
+          IF lt_bmr_mstat_upd IS NOT INITIAL.
+*            Modify ztpp_bmr_mstat from table lt_bmr_mstat_upd.
+          ENDIF.
+        ENDLOOP.
+
+        LOOP AT lt_bmr_ms6a2 INTO ls_bmr_ms6a2 WHERE matnr = <fs_output>-material                       "ZTPP_BMR_MS6A2
+                                                     AND werks = <fs_output>-plant
+                                                     AND  verid = <fs_output>-verid
+                                                     AND  zversion = <fs_output>-zversion.
+          MOVE-CORRESPONDING ls_bmr_ms6a2 TO ls_bmr_ms6a2_upd.
+          ls_bmr_ms6a2_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_ms6a2_upd-erdat    =  sy-datum.
+          ls_bmr_ms6a2_upd-erzet    =  sy-uzeit.
+          ls_bmr_ms6a2_upd-ernam    =  sy-uname.
+          CLEAR : ls_bmr_ms6a2_upd-aedat ,ls_bmr_ms6a2_upd-aezet ,ls_bmr_ms6a2_upd-aenam.
+          APPEND ls_bmr_ms6a2_upd TO lt_bmr_ms6a2_upd.
+          CLEAR ls_bmr_ms6a2_upd.
+          IF ls_bmr_ms6a2_upd IS NOT INITIAL.
+*           Modify ZTPP_BMR_MS6A2 from table lt_bmr_ms6a2_upd.
+          ENDIF.
+        ENDLOOP.
+
+        LOOP AT  lt_bmr_mbom INTO ls_bmr_mbom WHERE matnr = <fs_output>-material                          "ZTPP_BMR_MBOM
+                                              AND werks = <fs_output>-plant
+                                              AND verid = <fs_output>-verid
+                                              AND zversion = <fs_output>-zversion.
+
+          MOVE-CORRESPONDING ls_bmr_mbom TO ls_bmr_mbom_upd.
+          ls_bmr_mbom_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_mbom_upd-erdat    =  sy-datum.
+          ls_bmr_mbom_upd-erzet    =  sy-uzeit.
+          ls_bmr_mbom_upd-ernam    =  sy-uname.
+          CLEAR : ls_bmr_mbom_upd-aedat, ls_bmr_mbom_upd-aezet,ls_bmr_mbom_upd-aenam.
+          APPEND ls_bmr_mbom_upd TO lt_bmr_mbom_upd.
+          CLEAR ls_bmr_mbom_upd.
+          IF ls_bmr_mbom_upd IS NOT INITIAL .
+*            Modify ztpp_bmr_mbom from table lt_bmr_mbom_upd.
+          ENDIF.
+        ENDLOOP.
+
+        <fs_output>-select = ''.
+        CLEAR <fs_output>-celltab.
+        REFRESH gt_celltab.
+        gs_celltab-fieldname = 'SELECT'.
+        gs_celltab-style = cl_gui_alv_grid=>mc_style_disabled.
+        INSERT gs_celltab INTO TABLE gt_celltab .
+
+        gs_celltab-fieldname = 'ZREV_REASON'.
+        gs_celltab-style = cl_gui_alv_grid=>mc_style_disabled.
+        INSERT gs_celltab INTO TABLE gt_celltab.
+        INSERT LINES OF gt_celltab INTO TABLE <fs_output>-celltab.
+      ENDIF.
+    ENDLOOP.
+
+    CALL METHOD g_grid->refresh_table_display
+      EXPORTING
+        i_soft_refresh = 'X'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form select_all
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM select_all .
+  DATA: l_valid           TYPE char1,
+        lt_filter_entries TYPE lvc_t_fidx,
+        lv_selected_tabix TYPE sy-tabix.
+  FIELD-SYMBOLS: <fs_output> TYPE ty_output.
+
+  IF g_grid IS NOT INITIAL.
+    CALL METHOD g_grid->check_changed_data
+      IMPORTING
+        e_valid = l_valid.
+  ENDIF.
+  IF l_valid EQ 'X'.
+    CALL METHOD g_grid->get_filtered_entries
+      IMPORTING
+        et_filtered_entries = lt_filter_entries.
+
+    LOOP AT lt_output ASSIGNING <fs_output> WHERE select IS INITIAL.
+      lv_selected_tabix = sy-tabix.
+      READ TABLE lt_filter_entries FROM lv_selected_tabix TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        <fs_output>-select = 'X'.
+      ENDIF.
+    ENDLOOP.
+
+    gs_stbl-row = 'X'.
+    gs_stbl-col = 'X'.
+
+    IF sy-batch NE 'X'.
+      CALL METHOD g_grid->refresh_table_display
+        EXPORTING
+          is_stable = gs_stbl.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form deselect_all
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM deselect_all .
+
+  DATA: l_valid           TYPE char1,
+        lt_filter_entries TYPE lvc_t_fidx,
+        lv_selected_tabix TYPE sy-tabix.
+  FIELD-SYMBOLS: <fs_output> TYPE ty_output.
+
+  IF g_grid IS NOT INITIAL.
+    CALL METHOD g_grid->check_changed_data
+      IMPORTING
+        e_valid = l_valid.
+  ENDIF.
+  IF l_valid EQ 'X'.
+    CALL METHOD g_grid->get_filtered_entries
+      IMPORTING
+        et_filtered_entries = lt_filter_entries.
+
+    LOOP AT lt_output ASSIGNING <fs_output> WHERE select IS INITIAL.
+      lv_selected_tabix = sy-tabix.
+      READ TABLE lt_filter_entries FROM lv_selected_tabix TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        <fs_output>-select = ' '.
+      ENDIF.
+    ENDLOOP.
+
+    gs_stbl-row = 'X'.
+    gs_stbl-col = 'X'.
+
+    IF sy-batch NE 'X'.
+      CALL METHOD g_grid->refresh_table_display
+        EXPORTING
+          is_stable = gs_stbl.
+    ENDIF.
+  ENDIF.
+ENDFORM.
