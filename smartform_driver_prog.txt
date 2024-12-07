@@ -1,0 +1,222 @@
+*&---------------------------------------------------------------------*
+*& Report  ZWM_AGBS_RESVSLIP_GENERATE
+*&
+*&---------------------------------------------------------------------*
+REPORT zwm_agbs_inbdelv_note_gen.
+
+TYPES : BEGIN OF ty_likp,
+          vbeln TYPE likp-vbeln,
+        END OF ty_likp,
+
+        BEGIN OF ty_lips,
+          vbeln TYPE lips-vbeln,
+        END OF ty_lips.
+
+
+DATA : lt_likp       TYPE  TABLE OF ty_likp,
+       lt_ibd        TYPE  TABLE OF ty_lips,
+       ls_ibd        TYPE  ty_lips,
+       ls_options    TYPE  ssfcompop,
+       ls_parameters TYPE  ssfctrlop.
+
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE text-001.
+PARAMETERS: p_ibd  TYPE likp-vbeln,
+            p_date TYPE likp-erdat.
+SELECTION-SCREEN END OF BLOCK b1.
+
+AT SELECTION-SCREEN OUTPUT.
+
+  PERFORM modify_input_screen.
+
+
+START-OF-SELECTION.
+
+  PERFORM validate_input.
+
+  PERFORM generate_ibd_note.
+
+
+*&---------------------------------------------------------------------*
+*&      Form  VALIDATE_INPUT
+*&---------------------------------------------------------------------*
+
+FORM validate_input .
+
+  IF p_ibd IS NOT INITIAL AND p_date IS NOT INITIAL.
+
+    SELECT  vbeln
+      FROM  likp
+      INTO  TABLE lt_likp
+      WHERE vbeln = p_ibd
+      AND   erdat = p_date.
+    IF sy-subrc <> 0.
+      MESSAGE 'No data found for the given selection 'TYPE 'S' DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ELSEIF   p_ibd IS NOT INITIAL.
+
+    SELECT  vbeln
+      FROM  likp
+      INTO  TABLE lt_likp
+      WHERE vbeln = p_ibd.
+    IF sy-subrc <> 0.
+      MESSAGE 'Invalid IBD ' TYPE 'S' DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ELSEIF   p_date IS  NOT INITIAL .
+
+    SELECT  vbeln
+       FROM likp
+       INTO TABLE lt_likp
+       WHERE erdat = p_date.
+    IF sy-subrc <> 0.
+      MESSAGE 'Invalid IBD ' TYPE 'S' DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ELSE.
+    MESSAGE 'Input cannot be blank 'TYPE 'S' DISPLAY LIKE 'E'.
+    EXIT.
+
+  ENDIF.
+
+  " Validate plant
+  IF lt_likp IS NOT INITIAL.
+    SELECT vbeln
+      FROM lips
+      INTO TABLE lt_ibd
+      FOR  ALL ENTRIES IN lt_likp
+      WHERE vbeln = lt_likp-vbeln
+        AND werks = '2110'.
+    IF sy-subrc <> 0.
+      MESSAGE 'No data for lant 2110' TYPE 'S' DISPLAY LIKE 'E'.
+      EXIT.
+    ENDIF.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  GENERATE_RESV_SLIP
+*&---------------------------------------------------------------------*
+FORM generate_ibd_note .
+
+  DATA : fname        TYPE rs38l_fnam,
+         lv_total_cnt TYPE sy-tabix.
+
+  CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+    EXPORTING
+      formname           = 'ZWM_AGBS_INBOUND_DELV_NOTE'
+    IMPORTING
+      fm_name            = fname
+    EXCEPTIONS
+      no_form            = 1
+      no_function_module = 2
+      OTHERS             = 3.
+
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+
+  PERFORM print_settings.
+  DESCRIBE TABLE  lt_ibd LINES lv_total_cnt.
+  IF lv_total_cnt = 1.
+    READ TABLE lt_ibd INTO ls_ibd INDEX 1.
+    CALL FUNCTION fname
+      EXPORTING
+        control_parameters = ls_parameters
+        output_options     = ls_options
+        ibd_no             = ls_ibd-vbeln
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4
+        OTHERS             = 5.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+  ELSE.
+    SORT lt_ibd.
+    LOOP AT lt_ibd INTO ls_ibd.
+
+      CASE sy-tabix.
+        WHEN 1.
+          ls_parameters-no_open   = space .
+          ls_parameters-no_close  = 'X' .
+        WHEN lv_total_cnt .
+          ls_parameters-no_open   = 'X' .
+          ls_parameters-no_close  = space .
+        WHEN OTHERS.
+          ls_parameters-no_open   = 'X' .
+          ls_parameters-no_close  = 'X' .
+      ENDCASE.
+
+      CALL FUNCTION fname
+        EXPORTING
+          control_parameters = ls_parameters
+          output_options     = ls_options
+          ibd_no             = ls_ibd-vbeln
+        EXCEPTIONS
+          formatting_error   = 1
+          internal_error     = 2
+          send_error         = 3
+          user_canceled      = 4
+          OTHERS             = 5.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ENDIF.
+
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  MODIFY_INPUT_SCREEN
+*&---------------------------------------------------------------------*
+
+FORM modify_input_screen .
+
+  IF p_ibd IS NOT INITIAL.
+
+    LOOP AT SCREEN.
+      IF screen-name = 'P_DATE'.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  PRINT_SETTINGS
+*&---------------------------------------------------------------------*
+
+FORM print_settings .
+
+  DATA:lv_devtype   TYPE RSPOPTYPE.
+
+  CALL FUNCTION 'SSF_GET_DEVICE_TYPE'
+    EXPORTING
+      i_language             = sy-langu
+      i_application          = 'SAPDEFAULT'
+      IMPORTING
+      e_devtype              = lv_devtype
+    EXCEPTIONS
+      no_language            = 1
+      language_not_installed = 2
+      no_devtype_found       = 3
+      system_error           = 4
+      OTHERS                 = 5.
+
+  ls_options-tdprinter       = lv_devtype.
+  ls_options-tdnoprint       = 'X'.
+  ls_options-tdimmed         = 'X'.
+  ls_options-tdnoprev        = 'X'.
+  ls_parameters-no_dialog    = 'X'.
+  ls_parameters-preview      = 'X'.
+
+ENDFORM.
