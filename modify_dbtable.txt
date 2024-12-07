@@ -1,0 +1,17 @@
+LOOP AT  lt_bmr_mbom INTO ls_bmr_mbom WHERE matnr = <fs_output>-material                         
+                                              AND werks = <fs_output>-plant
+                                              AND verid = <fs_output>-verid
+                                              AND zversion = <fs_output>-zversion.
+
+          MOVE-CORRESPONDING ls_bmr_mbom TO ls_bmr_mbom_upd.
+          ls_bmr_mbom_upd-zversion =  ls_bmr_mhdr_upd-zversion.
+          ls_bmr_mbom_upd-erdat    =  sy-datum.
+          ls_bmr_mbom_upd-erzet    =  sy-uzeit.
+          ls_bmr_mbom_upd-ernam    =  sy-uname.
+          CLEAR : ls_bmr_mbom_upd-aedat, ls_bmr_mbom_upd-aezet,ls_bmr_mbom_upd-aenam.
+          APPEND ls_bmr_mbom_upd TO lt_bmr_mbom_upd.
+          CLEAR ls_bmr_mbom_upd.
+          IF ls_bmr_mbom_upd IS NOT INITIAL .
+           Modify ztpp_bmr_mbom from table lt_bmr_mbom_upd.
+          ENDIF.
+ENDLOOP.
