@@ -1,0 +1,379 @@
+*&---------------------------------------------------------------------*
+*& Report ZPP_BMR_TRANS_APPROVAL_ALERT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zpp_bmr_trans_approval_alert.
+
+TYPES : BEGIN OF ty_bmr_dtl,
+          bukrs      TYPE ztpp_bmr_tshdr-bukrs,
+          aufnr      TYPE afko-aufnr,
+          werks      TYPE ztpp_bmr_tshdr-mst_werks,
+          matnr      TYPE ztpp_bmr_tshdr-mst_matnr,
+          release_on TYPE ztpp_bmr_tshdr-zbmr_release_on,
+          maktx      TYPE makt-maktx,
+          mtart      TYPE mara-mtart,
+        END OF ty_bmr_dtl,
+
+        BEGIN OF sx_address,                  "mail validation
+          type    TYPE sxaddrtype-addr_type,
+          address TYPE soextreci1-receiver,
+        END OF sx_address.
+
+DATA : lt_bmr_dtl      TYPE TABLE OF ty_bmr_dtl,
+       ls_bmr_dtl      TYPE ty_bmr_dtl,
+       lt_bmr_tshdr    TYPE TABLE OF ztpp_bmr_tshdr,
+       ls_bmr_tshdr    TYPE ztpp_bmr_tshdr,
+       lt_afpo         TYPE TABLE OF afpo,
+       ls_afpo         TYPE afpo,
+       lt_mara         TYPE TABLE OF mara,
+       ls_mara         TYPE mara,
+       lt_makt         TYPE TABLE OF makt,
+       ls_makt         TYPE makt,
+       lv_msg_txt      TYPE string,
+       lv_matnr        TYPE ztpp_bmr_tshdr-mst_matnr,
+       lv_mtart        TYPE mara-mtart,
+       lv_aufnr        TYPE afko-aufnr,
+       lv_smtp_addr    TYPE adr6-smtp_addr,
+       lv1             TYPE string,
+       lv_current_date TYPE sy-datum,
+       lv_start_date   TYPE sy-datum,
+       unstruct        TYPE  sx_address.
+
+
+RANGES : r_date FOR ztpp_bmr_tshdr-zbmr_release_on.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME.
+  PARAMETERS     : p_plant TYPE ztpp_bmr_tshdr-mst_werks OBLIGATORY.
+  SELECT-OPTIONS : s_mtart FOR  lv_mtart.
+  SELECT-OPTIONS : s_matnr FOR  lv_matnr.
+  PARAMETERS     : p_sday  TYPE i OBLIGATORY.
+  SELECT-OPTIONS : s_mail  FOR  lv_smtp_addr OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK b1.
+
+
+AT SELECTION-SCREEN.
+  PERFORM mail_validation.
+
+START-OF-SELECTION.
+  PERFORM initialize.
+  PERFORM get_data.
+  IF lt_bmr_tshdr IS NOT INITIAL.
+    PERFORM process_data.
+    PERFORM mail_alert.
+  ENDIF.
+
+*&---------------------------------------------------------------------*
+*& Form initialize
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM initialize .
+
+  REFRESH: lt_afpo, lt_bmr_dtl, lt_bmr_tshdr, lt_makt , lt_mara.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form get_data
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM get_data.
+  " Calculate date range
+  lv_current_date = sy-datum.
+  lv_start_date = lv_current_date - p_sday. " p_sday is the parameter for pending days
+
+  r_date-sign = 'I'.
+  r_date-option = 'BT'.
+  r_date-low = lv_start_date.
+  r_date-high = lv_current_date.
+  APPEND r_date.
+
+  SELECT *
+    INTO TABLE lt_bmr_tshdr
+    FROM ztpp_bmr_tshdr
+    WHERE mst_matnr IN s_matnr
+      AND mst_werks EQ p_plant
+      AND zbmr_release_on IN r_date.
+
+  IF sy-subrc EQ 0.
+    SELECT *
+      INTO TABLE lt_afpo
+      FROM afpo
+      FOR ALL ENTRIES IN lt_bmr_tshdr
+      WHERE  charg = lt_bmr_tshdr-charg.
+
+    IF sy-subrc EQ 0.
+      SELECT *
+        INTO TABLE lt_mara
+        FROM mara
+        FOR ALL ENTRIES IN lt_afpo
+        WHERE matnr = lt_afpo-matnr
+          AND mtart IN s_mtart.
+      IF sy-subrc EQ 0.
+        SELECT *
+          INTO TABLE lt_makt
+          FROM makt
+          FOR ALL ENTRIES IN lt_mara
+          WHERE matnr = lt_mara-matnr
+            AND spras = sy-langu.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form process_data
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM process_data .
+
+  LOOP AT lt_bmr_tshdr INTO ls_bmr_tshdr. "WHERE zbmr_release_on GE lv_start_date AND zbmr_release_on LE lv_current_date.
+    CLEAR ls_afpo.
+    READ TABLE lt_afpo INTO ls_afpo WITH KEY charg = ls_bmr_tshdr-charg.
+    IF sy-subrc EQ 0.
+      CLEAR ls_mara.
+      READ TABLE lt_mara INTO ls_mara WITH KEY matnr = ls_afpo-matnr.
+      IF sy-subrc EQ 0.
+        CLEAR ls_makt.
+        READ TABLE lt_makt INTO ls_makt WITH KEY matnr = ls_mara-matnr.
+        IF sy-subrc EQ 0.
+          ls_bmr_dtl-bukrs      = ls_bmr_tshdr-bukrs.
+          ls_bmr_dtl-release_on = ls_bmr_tshdr-zbmr_release_on.
+          ls_bmr_dtl-werks      = ls_afpo-dwerk.
+          ls_bmr_dtl-mtart      = ls_mara-mtart.
+          CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+            EXPORTING
+              input  = ls_afpo-matnr
+            IMPORTING
+              output = lv_matnr.
+
+          ls_bmr_dtl-matnr      = lv_matnr.
+          ls_bmr_dtl-maktx      = ls_makt-maktx.
+
+          CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+            EXPORTING
+              input  = ls_afpo-aufnr
+            IMPORTING
+              output = lv_aufnr.
+          ls_bmr_dtl-aufnr      = lv_aufnr.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+    APPEND ls_bmr_dtl TO lt_bmr_dtl.
+    CLEAR ls_bmr_dtl.
+
+  ENDLOOP.
+ENDFORM.
+
+
+*&---------------------------------------------------------------------*
+*& Form mail_alert
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM mail_alert .
+* Creates persistent send request
+  DATA :lo_send_request         TYPE REF TO cl_bcs,
+        lo_document             TYPE REF TO cl_document_bcs,
+        l_sender                TYPE REF TO if_sender_bcs,
+        lo_recipient            TYPE REF TO if_recipient_bcs,
+        lo_distributionlist_bcs TYPE REF TO cl_distributionlist_bcs,
+        lt_att_content_hex      TYPE solix_tab,
+        lt_message_body         TYPE bcsy_text,
+        l_subject               TYPE so_obj_des,
+        lv_objnam               TYPE sood-objnam,
+        lv_text                 TYPE string,
+        lv_date                 TYPE string,
+        lv_list                 TYPE so_obj_nam,
+        lv_len                  TYPE i,
+        lv_release_on           TYPE char10,
+        smtp_addr               TYPE adr6-smtp_addr,
+        ob_cam_address_bcs      TYPE REF TO cl_cam_address_bcs.
+
+
+* Creates persistent send request
+  lo_send_request = cl_bcs=>create_persistent( ).
+
+* Sender addess
+  l_sender = cl_sapuser_bcs=>create( sy-uname ).
+  CALL METHOD lo_send_request->set_sender
+    EXPORTING
+      i_sender = l_sender.
+
+  l_subject = 'Email Alert' .
+
+* Mail Body
+  CLEAR: lv_text.
+  lv_text = 'Dear Sir/Madam,'.
+  APPEND lv_text TO lt_message_body.
+
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR: lv_text.
+  lv_text = '<br/><p>Following are the pending list of orders which are awaiting your approval.</p>' .
+  APPEND lv_text TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR: lv_text.
+  lv_text = '<p>Kindly go through the same and do the needful.</p>' .
+  APPEND lv_text TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR: lv_text.
+  lv_text = '<TABLE border="1" style="width: 75%; text-align: center; border-collapse: collapse;">'.
+  APPEND lv_text TO lt_message_body.
+
+* table headers
+  CLEAR lv_text.
+  lv_text = '<th bgcolor="#C0C0C0">Order</th>'.
+  APPEND lv_text TO lt_message_body.
+
+  CLEAR lv_text.
+  lv_text = '<th bgcolor="#C0C0C0">Release On</th>'.
+  APPEND lv_text TO lt_message_body.
+
+  CLEAR lv_text.
+  lv_text = '<th bgcolor="#C0C0C0">Material Type</th>'.
+  APPEND lv_text TO lt_message_body.
+
+  CLEAR lv_text.
+  lv_text = '<th bgcolor="#C0C0C0">Material Code</th>'.
+  APPEND lv_text TO lt_message_body.
+
+  CLEAR lv_text.
+  lv_text = '<th bgcolor="#C0C0C0">Material Description</th>'.
+  APPEND lv_text TO lt_message_body.
+
+  LOOP AT lt_bmr_dtl INTO ls_bmr_dtl.    .
+    CLEAR: lv_text.
+    CONCATENATE '<tr><td align = "center">' ls_bmr_dtl-aufnr '</td>' INTO lv_text.
+    APPEND lv_text TO lt_message_body.
+
+    CALL FUNCTION 'CONVERT_DATE_TO_EXTERNAL'
+      EXPORTING
+        date_internal            = ls_bmr_dtl-release_on
+      IMPORTING
+        date_external            = lv_release_on
+      EXCEPTIONS
+        date_internal_is_invalid = 1
+        OTHERS                   = 2.
+    IF sy-subrc <> 0.
+*       Implement suitable error handling here
+    ENDIF.
+
+    CLEAR: lv_text.
+    CONCATENATE '<td align = "center">' lv_release_on '</td>' INTO lv_text.
+    APPEND lv_text TO lt_message_body.
+
+    CLEAR: lv_text.
+    CONCATENATE '<td align = "center">' ls_bmr_dtl-mtart '</td>' INTO lv_text.
+    APPEND lv_text TO lt_message_body.
+
+    CLEAR: lv_text.
+    CONCATENATE '<td align = "center">' ls_bmr_dtl-matnr '</td>' INTO lv_text.
+    APPEND lv_text TO lt_message_body.
+
+    CLEAR: lv_text.
+    CONCATENATE '<td align = "center">' ls_bmr_dtl-maktx '</td></TR>' INTO lv_text.
+    APPEND lv_text TO lt_message_body.
+
+    CLEAR lv_text.
+  ENDLOOP.
+
+  CLEAR: lv_text.
+  lv_text = '</TABLE>'.
+  APPEND lv_text TO lt_message_body.
+
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR: lv_text.
+  lv_text = '<br><p>Thanking you</p>'.
+  APPEND lv_text TO lt_message_body.
+  APPEND INITIAL LINE TO lt_message_body.
+
+  CLEAR: lv_text.
+  lv_text = '<p>With Regards,<br>'.
+  APPEND lv_text TO lt_message_body.
+
+  CLEAR: lv_text.
+  lv_text = 'Galaxy IT Team</p>'.
+  APPEND lv_text TO lt_message_body.
+
+  lo_document = cl_document_bcs=>create_document(
+    i_type    = 'HTM'
+    i_text    = lt_message_body
+    i_subject = l_subject ).
+
+
+  LOOP AT s_mail.
+*    IF lv1 CO s_mail.
+    ob_cam_address_bcs = cl_cam_address_bcs=>create_internet_address( s_mail-low ).
+    CALL METHOD lo_send_request->add_recipient
+      EXPORTING
+        i_recipient = ob_cam_address_bcs                 " Recipient of Message
+        i_express   = 'X'.
+*    ELSE .
+*      MESSAGE 'Please put mail id in correct format' TYPE 'I' DISPLAY LIKE 'E' .
+*    ENDIF.
+  ENDLOOP.
+
+* add document object to send request
+  lo_send_request->set_document( lo_document ).
+  CALL METHOD lo_send_request->send( ).
+
+  IF sy-subrc EQ 0.
+    COMMIT WORK.
+    MESSAGE s719(sawe_bo_sa). " E-mail sent successfully
+    LEAVE TO SCREEN 0.
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form mail_validation
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM mail_validation .
+
+  unstruct-type = 'INT'.
+  unstruct-address = s_mail.
+
+  CALL FUNCTION 'SX_INTERNET_ADDRESS_TO_NORMAL'
+    EXPORTING
+      address_unstruct = unstruct
+*     COMPLETE_ADDRESS = 'X'
+* IMPORTING
+*     ADDRESS_NORMAL   =
+*     LOCAL            =
+*     DOMAIN           =
+*     COMMENT          =
+*     ADDR_NORMAL_NO_UPPER                 =
+*     ADDR_NORMAL_NO_UP_WITH_COMMENT       =
+* EXCEPTIONS
+*     ERROR_ADDRESS_TYPE                   = 1
+*     ERROR_ADDRESS    = 2
+*     ERROR_GROUP_ADDRESS                  = 3
+*     OTHERS           = 4
+    .
+  IF sy-subrc <> 0.
+    MESSAGE 'Please enter valid email address' TYPE 'E'.
+  ENDIF.
+ENDFORM.
