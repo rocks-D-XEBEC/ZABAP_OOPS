@@ -1,0 +1,617 @@
+SAP ABAP OOPS 
+USED IN : lvc_t_fcat, abap oops classes and methods, disabled checkboxes, fieldcat, alv(abap_list_viewer).
+
+
+
+REPORT zpp_bmr_batch_discard.
+
+TYPES: BEGIN OF ty_final,
+         select        TYPE char1,
+         bukrs         TYPE ztpp_bmr_tshdr-bukrs,
+         material      TYPE ztpp_bmr_tshdr-mst_matnr,
+         plant         TYPE ztpp_bmr_tshdr-mst_werks,
+         batch         TYPE ztpp_bmr_tshdr-charg,
+         created_on    TYPE ztpp_bmr_tshdr-erdat,
+         created_by    TYPE ztpp_bmr_tshdr-ernam,
+         created_at    TYPE ztpp_bmr_tshdr-erzet,
+         prd_version   TYPE ztpp_bmr_tshdr-mst_verid,
+         tmp_version   TYPE ztpp_bmr_tshdr-mst_zversion,
+         status        TYPE ztpp_bmr_tshdr-zbmr_batch_stat,
+         status_txt    TYPE dd07t-ddtext,
+         material_desc TYPE makt-maktx,
+         prd_order     TYPE afpo-aufnr,
+         prd_qty       TYPE afpo-psmng,
+         cell_styles   TYPE lvc_t_styl,
+       END OF ty_final.
+
+DATA: lt_bmr_tshdr TYPE TABLE OF ztpp_bmr_tshdr,
+      ls_bmr_tshdr TYPE ztpp_bmr_tshdr,
+      lt_afpo      TYPE TABLE OF afpo,
+      ls_afpo      TYPE afpo,
+      lt_makt      TYPE TABLE OF makt,
+      ls_makt      TYPE makt,
+      lt_dd07t     TYPE TABLE OF dd07t,
+      ls_dd07t     TYPE dd07t,
+      lt_final     TYPE TABLE OF ty_final,
+      ls_final     TYPE ty_final.
+
+CLASS lcl_event_receiver DEFINITION DEFERRED.
+
+DATA: ok_code            LIKE sy-ucomm,
+      save_ok            LIKE sy-ucomm,
+      g_grid             TYPE REF TO cl_gui_alv_grid,
+      g_custom_container TYPE REF TO cl_gui_custom_container,
+      gt_fieldcat        TYPE lvc_t_fcat,
+      gs_layout          TYPE lvc_s_layo,
+      g_event_receiver   TYPE REF TO lcl_event_receiver,
+      gs_stbl            TYPE lvc_s_stbl,
+      gt_celltab         TYPE lvc_t_styl,
+      gs_celltab         TYPE lvc_s_styl.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME.
+  SELECT-OPTIONS: s_date  FOR ls_final-created_on OBLIGATORY,
+                  s_werks FOR ls_final-plant,
+                  s_charg FOR ls_final-batch,
+                  s_matnr FOR ls_final-material.
+SELECTION-SCREEN END OF BLOCK b1.
+
+START-OF-SELECTION.
+  PERFORM get_data.
+  IF lt_bmr_tshdr IS NOT INITIAL.
+    PERFORM process_data.
+    IF lt_final IS NOT INITIAL.
+      CALL SCREEN 100.
+    ELSE.
+      MESSAGE 'No data found' TYPE 'S'.
+    ENDIF.
+  ELSE.
+    MESSAGE 'No data found' TYPE 'S'.
+  ENDIF.
+
+*&---------------------------------------------------------------------*
+*& Form get_data
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM get_data .
+  SELECT *
+    INTO TABLE lt_bmr_tshdr
+    FROM ztpp_bmr_tshdr
+    WHERE mst_matnr IN s_matnr
+      AND mst_werks IN s_werks
+      AND charg IN s_charg
+      AND erdat IN s_date
+      AND zbmr_batch_stat = '01'.
+  IF sy-subrc EQ 0.
+    SELECT *
+      INTO TABLE lt_afpo
+      FROM afpo
+      FOR ALL ENTRIES IN lt_bmr_tshdr
+      WHERE matnr = lt_bmr_tshdr-mst_matnr
+        AND charg = lt_bmr_tshdr-charg.
+
+    SELECT *
+      INTO TABLE lt_makt
+      FROM makt
+      FOR ALL ENTRIES IN lt_bmr_tshdr
+      WHERE matnr = lt_bmr_tshdr-mst_matnr
+        AND spras = sy-langu.
+
+    SELECT *
+      INTO TABLE lt_dd07t
+      FROM dd07t
+      WHERE domname = 'ZBMR_BATCH_STAT'
+        AND ddlanguage = sy-langu
+        AND as4local = 'A'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form process_data
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM process_data .
+
+  LOOP AT lt_bmr_tshdr INTO ls_bmr_tshdr.
+    ls_final-material = ls_bmr_tshdr-mst_matnr.
+    ls_final-plant     =  ls_bmr_tshdr-mst_werks.
+    ls_final-bukrs     =  ls_bmr_tshdr-bukrs.
+    ls_final-batch     =  ls_bmr_tshdr-charg.
+    ls_final-prd_version     =  ls_bmr_tshdr-mst_verid.
+    ls_final-tmp_version     =  ls_bmr_tshdr-mst_zversion.
+    ls_final-created_on     =  ls_bmr_tshdr-erdat.
+    ls_final-created_at     =  ls_bmr_tshdr-erzet.
+    ls_final-created_by     =  ls_bmr_tshdr-ernam.
+    ls_final-status         =  ls_bmr_tshdr-zbmr_batch_stat.
+    READ TABLE lt_dd07t INTO ls_dd07t WITH KEY domname = 'ZBMR_BATCH_STAT'
+                                               domvalue_l = ls_bmr_tshdr-zbmr_batch_stat.
+    IF sy-subrc EQ 0.
+      ls_final-status_txt = ls_dd07t-ddtext.
+    ENDIF.
+    READ TABLE lt_afpo INTO ls_afpo WITH KEY matnr = ls_bmr_tshdr-mst_matnr
+                                             charg = ls_bmr_tshdr-charg
+                                             dwerk = ls_bmr_tshdr-mst_werks.
+    IF sy-subrc = 0.
+      ls_final-prd_order  =  ls_afpo-aufnr.
+      ls_final-prd_qty    =  ls_afpo-psmng.
+    ENDIF.
+
+    CLEAR ls_makt.
+    READ TABLE lt_makt INTO ls_makt WITH KEY matnr = ls_bmr_tshdr-mst_matnr.
+    IF sy-subrc EQ 0.
+      ls_final-material_desc  =  ls_makt-maktx.
+    ENDIF.
+
+    REFRESH: gt_celltab.
+    gs_celltab-fieldname = 'SELECT'.
+    gs_celltab-style = cl_gui_alv_grid=>mc_style_enabled.
+    INSERT gs_celltab INTO TABLE gt_celltab.
+    INSERT LINES OF gt_celltab INTO TABLE ls_final-cell_styles.
+    APPEND ls_final TO lt_final.
+    CLEAR ls_final.
+  ENDLOOP.
+
+ENDFORM.
+**************************************************************
+* LOCAL CLASS Definition
+**************************************************************
+CLASS lcl_event_receiver DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      handle_toolbar
+        FOR EVENT toolbar OF cl_gui_alv_grid
+        IMPORTING e_object e_interactive,
+
+      handle_user_command
+        FOR EVENT user_command OF cl_gui_alv_grid
+        IMPORTING e_ucomm.
+ENDCLASS.
+CLASS lcl_event_receiver IMPLEMENTATION.
+  METHOD handle_toolbar.
+    DATA: gs_toolbar TYPE stb_button,
+          gs_menu    TYPE stb_btnmnu.
+    MOVE 3 TO gs_toolbar-butn_type.
+    APPEND gs_toolbar TO e_object->mt_toolbar.
+
+    CLEAR gs_toolbar.
+    MOVE 'SELECT_ALL' TO gs_toolbar-function.
+    MOVE icon_select_all TO gs_toolbar-icon.
+    MOVE 'Select All'(111) TO gs_toolbar-quickinfo.
+    MOVE space TO gs_toolbar-disabled.
+    APPEND gs_toolbar TO e_object->mt_toolbar.
+
+    CLEAR gs_toolbar.
+    MOVE 'DESELECT_ALL' TO gs_toolbar-function.
+    MOVE icon_deselect_all TO gs_toolbar-icon.
+    MOVE 'Deselect All'(111) TO gs_toolbar-quickinfo.
+    MOVE space TO gs_toolbar-disabled.
+    APPEND gs_toolbar TO e_object->mt_toolbar.
+
+    CLEAR gs_toolbar.
+    MOVE 'REJECT' TO gs_toolbar-function.
+    MOVE icon_reject TO gs_toolbar-icon.
+    MOVE 'Discard' TO gs_toolbar-text.
+    MOVE 'Discard the selected entry'(111) TO gs_toolbar-quickinfo.
+    MOVE space TO gs_toolbar-disabled.
+    APPEND gs_toolbar TO e_object->mt_toolbar.
+
+  ENDMETHOD.
+
+  METHOD handle_user_command.
+    DATA: l_valid           TYPE char1,
+          lt_filter_entries TYPE lvc_t_fidx,
+          l_locked          TYPE c.
+    CASE e_ucomm.
+      WHEN 'REJECT'.
+        PERFORM reject.
+
+      WHEN 'SELECT_ALL'.
+        PERFORM select_all.
+
+      WHEN 'DESELECT_ALL'.
+        PERFORM deselect_all.
+
+      WHEN OTHERS.
+    ENDCASE.
+  ENDMETHOD.
+ENDCLASS.
+
+*&---------------------------------------------------------------------*
+*& Module STATUS_0100 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'ZBMR_BATCH_DISCARD'.
+  SET TITLEBAR 'ZBMR_BATCH_DISCARD'.
+
+  IF g_grid IS INITIAL.
+    PERFORM create_and_init_alv CHANGING lt_final
+                                         gt_fieldcat
+                                         gs_layout.
+  ENDIF.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK' OR 'CANCEL' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form create_and_init_alv
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      <-- LT_FINAL
+*&      <-- GT_FIELDCAT
+*&      <-- GS_LAYOUT
+*&---------------------------------------------------------------------*
+FORM create_and_init_alv  CHANGING pt_outtab LIKE lt_final[]
+                                   pt_fieldcat TYPE lvc_t_fcat
+                                   ps_layout TYPE lvc_s_layo.
+
+  DATA: lt_exclude TYPE ui_functions.
+
+  CREATE OBJECT g_grid
+    EXPORTING
+      i_parent = cl_gui_custom_container=>screen0.
+
+  PERFORM build_fieldcat CHANGING pt_fieldcat.
+
+  PERFORM exclude_tb_functions CHANGING lt_exclude.
+
+  ps_layout-zebra = 'X'.
+  ps_layout-cwidth_opt = 'X'.
+  ps_layout-stylefname = 'CELL_STYLES'.
+
+  CALL METHOD g_grid->set_table_for_first_display
+    EXPORTING
+      is_layout            = ps_layout
+      it_toolbar_excluding = lt_exclude
+    CHANGING
+      it_fieldcatalog      = pt_fieldcat
+      it_outtab            = lt_final.
+
+  CREATE OBJECT g_event_receiver.
+
+  CALL METHOD g_grid->set_ready_for_input
+    EXPORTING
+      i_ready_for_input = 1.
+
+  CALL METHOD g_grid->register_edit_event
+    EXPORTING
+      i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+
+  SET HANDLER g_event_receiver->handle_toolbar FOR g_grid.
+  SET HANDLER g_event_receiver->handle_user_command FOR g_grid.
+
+  CALL METHOD g_grid->set_toolbar_interactive.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form build_fieldcat
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      <-- PT_FIELDCAT
+*&---------------------------------------------------------------------*
+FORM build_fieldcat  CHANGING pt_fieldcat  TYPE lvc_t_fcat..
+  DATA: ls_fcat TYPE lvc_s_fcat,
+        pos     TYPE i.
+
+  CLEAR: pos, ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'SELECT'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Select'.
+  ls_fcat-checkbox = 'X'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'BUKRS'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Company Code'.
+  ls_fcat-ref_table = 'T001'.
+  ls_fcat-ref_field = 'BUKRS'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'PLANT'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Plant'.
+  ls_fcat-ref_table = 'T001W'.
+  ls_fcat-ref_field = 'WERKS'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'MATERIAL'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Material'.
+  ls_fcat-ref_table = 'MARA'.
+  ls_fcat-ref_field = 'MATNR'.
+  ls_fcat-convexit = 'ALPHA'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'MATERIAL_DESC'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Material Description'.
+  ls_fcat-ref_table = 'MAKT'.
+  ls_fcat-ref_field = 'MAKTX'.
+  ls_fcat-lowercase = 'X'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'PRD_ORDER'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Production Order'.
+  ls_fcat-ref_table = 'AFPO'.
+  ls_fcat-ref_field = 'AUFNR'.
+  ls_fcat-convexit = 'ALPHA'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'BATCH'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Batch'.
+  ls_fcat-ref_table = 'AFPO'.
+  ls_fcat-ref_field = 'CHARG'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'PRD_VERSION'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Production Version'.
+  ls_fcat-ref_table = 'ZTPP_BMR_TSHDR'.
+  ls_fcat-ref_field = 'VERID'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'TMP_VERSION'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Template Version'.
+  ls_fcat-ref_table = 'ZTPP_BMR_TSHDR'.
+  ls_fcat-ref_field = 'MST_ZVERSION'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'PRD_QTY'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Production Quantity'.
+  ls_fcat-ref_table = 'AFPO'.
+  ls_fcat-ref_field = 'PSMNG'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'CREATED_ON'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Created On'.
+  ls_fcat-ref_table = 'ZTPP_BMR_TSHDR'.
+  ls_fcat-ref_field = 'ERDAT'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'CREATED_AT'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Created At'.
+  ls_fcat-ref_table = 'ZTPP_BMR_TSHDR'.
+  ls_fcat-ref_field = 'ERZET'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'CREATED_BY'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Created By'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-row_pos = '1'.
+  ls_fcat-col_pos = pos + 1.
+  ls_fcat-fieldname = 'STATUS_TXT'.
+  ls_fcat-tabname = 'LT_FINAL'.
+  ls_fcat-coltext = 'Status'.
+  ls_fcat-lowercase = 'X'.
+  APPEND ls_fcat TO pt_fieldcat.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form exclude_tb_functions
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      <-- LT_EXCLUDE
+*&---------------------------------------------------------------------*
+FORM exclude_tb_functions  CHANGING pt_exclude TYPE ui_functions.
+
+  DATA ls_exclude TYPE ui_func.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_delete_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_append_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_insert_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_move_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste_new_row.
+  APPEND ls_exclude TO pt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_refresh.
+  APPEND ls_exclude TO pt_exclude.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form REJECT
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM reject .
+  DATA: ls_bmr_tstat TYPE ztpp_bmr_tstat.
+  FIELD-SYMBOLS: <fs_final> TYPE ty_final.
+
+  " Update
+  " 1. ZTPP_BMR_TSHDR with status 09 in BMR Batch Status field (Use Update command)
+  " 2. ZTPP_BMR_TSTAT table update ( BUKRS, CHARG, ERDAT, ERZET, ERNAM, ZBMR_BATCH_STAT)
+
+  IF g_grid IS NOT INITIAL.
+    CALL METHOD g_grid->check_changed_data.
+    LOOP AT lt_final ASSIGNING <fs_final> WHERE select = 'X'.
+      UPDATE ztpp_bmr_tshdr SET zbmr_batch_stat = '09'
+                            WHERE bukrs = <fs_final>-bukrs
+                              AND charg = <fs_final>-batch.
+      IF sy-subrc = 0.
+        COMMIT WORK.
+      ENDIF.
+      IF sy-subrc = 0.
+        ls_bmr_tstat-bukrs = <fs_final>-bukrs.
+        ls_bmr_tstat-charg = <fs_final>-batch.
+        ls_bmr_tstat-erdat = sy-datum.
+        ls_bmr_tstat-erzet = sy-uzeit.
+        ls_bmr_tstat-ernam = sy-uname.
+        ls_bmr_tstat-zbmr_batch_stat = '09'.
+        MODIFY ztpp_bmr_tstat FROM ls_bmr_tstat.
+        CLEAR ls_bmr_tstat.
+      ENDIF.
+      <fs_final>-select = ''.
+      <fs_final>-status = '09'.
+      READ TABLE lt_dd07t INTO ls_dd07t WITH KEY domname = 'ZBMR_BATCH_STAT'
+                                                 domvalue_l = <fs_final>-status.
+      IF sy-subrc EQ 0.
+        <fs_final>-status_txt = ls_dd07t-ddtext.
+      ENDIF.
+      CLEAR <fs_final>-cell_styles.
+      REFRESH gt_celltab.
+      gs_celltab-fieldname = 'SELECT'.
+      gs_celltab-style = cl_gui_alv_grid=>mc_style_disabled.
+      INSERT gs_celltab INTO TABLE gt_celltab.
+      INSERT LINES OF gt_celltab INTO TABLE <fs_final>-cell_styles.
+    ENDLOOP.
+    CALL METHOD g_grid->refresh_table_display
+      EXPORTING
+        i_soft_refresh = 'X'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form deselect_all
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM deselect_all .
+  DATA: l_valid           TYPE char1,
+        lt_filter_entries TYPE lvc_t_fidx,
+        lv_selected_tabix TYPE sy-tabix.
+
+  FIELD-SYMBOLS: <fs_final> TYPE ty_final.
+  IF g_grid IS NOT INITIAL.
+    CALL METHOD g_grid->check_changed_data
+      IMPORTING
+        e_valid = l_valid.
+  ENDIF.
+  IF l_valid EQ 'X'.
+    CALL METHOD g_grid->get_filtered_entries
+      IMPORTING
+        et_filtered_entries = lt_filter_entries.
+    LOOP AT lt_final ASSIGNING <fs_final> WHERE select = 'X'.
+      lv_selected_tabix = sy-tabix.
+      READ TABLE lt_filter_entries FROM lv_selected_tabix TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        <fs_final>-select = ' '.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+  gs_stbl-row = 'X'.
+  gs_stbl-col = 'X'.
+
+  CALL METHOD g_grid->refresh_table_display
+    EXPORTING
+      is_stable = gs_stbl.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form select_all
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM select_all .
+  DATA: l_valid           TYPE char1,
+        lt_filter_entries TYPE lvc_t_fidx,
+        lv_selected_tabix TYPE sy-tabix.
+  FIELD-SYMBOLS: <fs_final> TYPE ty_final.
+
+  IF g_grid IS NOT INITIAL.
+    CALL METHOD g_grid->check_changed_data
+      IMPORTING
+        e_valid = l_valid.
+  ENDIF.
+  IF l_valid EQ 'X'.
+    CALL METHOD g_grid->get_filtered_entries
+      IMPORTING
+        et_filtered_entries = lt_filter_entries.
+
+    LOOP AT lt_final ASSIGNING <fs_final> WHERE select IS INITIAL.
+      lv_selected_tabix = sy-tabix.
+      READ TABLE lt_filter_entries FROM lv_selected_tabix TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        <fs_final>-select = 'X'.
+      ENDIF.
+    ENDLOOP.
+
+    gs_stbl-row = 'X'.
+    gs_stbl-col = 'X'.
+
+    IF sy-batch NE 'X'.
+      CALL METHOD g_grid->refresh_table_display
+        EXPORTING
+          is_stable = gs_stbl.
+    ENDIF.
+  ENDIF.
+
+
+ENDFORM.
